@@ -1,0 +1,258 @@
+name: Unity PC Build
+
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Repository hosting the project
+        type: string
+        required: true
+      ref:
+        description: Reference to checkout
+        type: string
+        required: false
+      project-version:
+        description: Location of ProjectVersion.txt (if needed)
+        type: string
+        required: false
+      binary-name:
+        description: Name of the output binary
+        type: string
+        required: true
+      google-folder-id:
+        description: Id of the Google drive folder for upload
+        type: string
+        required: true
+      runner:
+        description: Runner to use for the build
+        type: string
+        required: true
+        default: 'self-hosted'
+
+jobs:
+  # Find a runner, and sync the project
+  sync-project:
+    name: Sync project
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      runner-name: ${{ runner.name }}
+      commit: ${{ steps.checkout.outputs.ref }}
+    steps:
+      - name: Kill any existing builds
+        run: |
+          docker rm -f pew-unity-builder
+
+      - id: app-installation
+        name: Find builder installation for ${{ inputs.repository }}
+        uses: PlayEveryware/action-find-app-installation@v1
+        with:
+          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          repository: ${{ inputs.repository }}
+
+      - id: lfs-cache-server
+        name: Determine the GitHub LFS cache server to use
+        run: |
+          $match = ( echo "${{ inputs.repository }}" | `
+            Select-String -Pattern "^PlayEveryWare/.*$" )
+          if ( $match ) {
+            Add-Content -Path "$ENV:GITHUB_OUTPUT" -Encoding ascii -Value "value=https://lfscache.office.playeveryware.com/${{ inputs.repository }}"
+          }
+
+      - id: app-token
+        name: Acquire builder installation token for ${{ inputs.repository }}
+        uses: PlayEveryWare/action-app-installation-pat@v1
+        with:
+          installation-id: ${{ steps.app-installation.outputs.installation-id }}
+          private-key: ${{ secrets.PEW_BUILDER_KEY_EL9FMYV8DVTLYMLSZJZRVL569RFZWPS }}
+          repositories: ${{ inputs.repository }}
+
+      - name: Checkout the project repository
+        uses: PlayEveryWare/checkout@v1
+        id: checkout
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ steps.app-token.outputs.token }}
+          path: title
+          ref: ${{ inputs.ref }}
+          lfs: true
+          lfs-url: ${{ steps.lfs-cache-server.outputs.value }}
+          clean-exclude: /**/Library/
+
+  # Gerenrate the build environemnt needed for the project
+  generate-build-environment:
+    name: Prepare build environment
+    runs-on: ${{ needs.sync-project.outputs.runner-name }}
+    needs: sync-project
+    outputs:
+      runner-name: ${{ runner.name }}
+      image-name: ${{ steps.info.outputs.image-name }}
+      library-folder-exists: ${{ steps.info.outputs.library-folder-exists }}
+      project-path: ${{ steps.info.outputs.project-path }}
+    steps:
+      - name: Ensure we're on the correct commit
+        run: |
+          pushd title
+          git reset --hard ${{ needs.sync-project.outputs.commit }}
+          git clean -ddffx -e /**/Library/
+
+      - id: info
+        name: Get Unity project information
+        uses: PlayEveryWare/action-unity-info@v1
+        with:
+          path: title
+          project-version: ${{ inputs.project-version }}
+
+      - name: Dump Unity project information
+        run: |
+          echo "Project path: '${{ steps.info.outputs.project-path }}'"
+          echo "Unity version: '${{ steps.info.outputs.unity-version }}'"
+          echo "Unity changeset: '${{ steps.info.outputs.unity-changeset }}'"
+          echo "Library folder exists: '${{ steps.info.outputs.library-folder-exists }}'"
+          echo "Image name: '${{ steps.info.outputs.image-name }}'"
+          echo "Image exists: '${{ steps.info.outputs.image-exists }}'"
+
+      - name: Checkout pew-docker repository
+        if: steps.info.outputs.image-exists != 'true'
+        uses: PlayEveryWare/checkout@v1
+        with:
+          repository: PlayEveryWare/pew-docker
+          path: .pew-builder/pew-docker
+
+      - name: Login to GitHub container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Create and push Unity Image
+        if: steps.info.outputs.image-exists != 'true'
+        run: |
+          echo "::warning::Unity image for ${{ steps.info.outputs.unity-version }} does not exist. Building it now..."
+
+          docker build `
+            --build-arg UNITY_VERSION=${{ steps.info.outputs.unity-version }} `
+            --build-arg UNITY_CHANGESET=${{ steps.info.outputs.unity-changeset }} `
+            -t ${{ steps.info.outputs.image-name }} `
+            .pew-builder/pew-docker/unity
+
+          docker push ${{ steps.info.outputs.image-name }}
+
+      - name: Pull unity image
+        run: |
+          docker pull ${{ steps.info.outputs.image-name }}
+
+  # Import assets if the Library/ folder doesn't exist. We do this as a
+  # separate job so it's obvious why the build is taking a long time.
+  import-assets-pc:
+    name: Perform initial PC asset import
+    needs: [sync-project, generate-build-environment]
+    runs-on: ${{ needs.sync-project.outputs.runner-name }}
+    if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
+    outputs:
+      runner-name: ${{ runner.name }}
+    steps:
+      - name: Ensure we're on the correct commit
+        run: |
+          pushd title
+          git reset --hard ${{ needs.sync-project.outputs.commit }}
+          git clean -ddffx -e /**/Library/
+
+      - name: Log warning that asset import may take a while
+        run: |
+          echo "::warning::No Library/ folder detected. Performing a fresh asset import"
+
+      - name: Kill any existing builder
+        run: |
+          docker rm -f pew-unity-builder
+
+      - name: Import assets
+        run: |
+          docker run --rm `
+            --name pew-unity-builder `
+            -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
+            ${{ needs.generate-build-environment.outputs.image-name }} `
+            c:\Unity\Editor\Unity.exe `
+            -batchmode `
+            -nographics `
+            -adb2 `
+            -EnableCacheServer `
+            -cacheServerEndpoint 10.50.10.208 `
+            -cacheServerEnableDownload true `
+            -cacheServerEnableUpload true `
+            -projectPath c:\Source `
+            -logFile C:\Source\log.txt `
+            -username ${{ secrets.UNITY_EMAIL }} `
+            -password ${{ secrets.UNITY_PASSWORD }} `
+            -serial ${{ secrets.UNITY_SERIAL }} `
+            -quit
+
+          type ${{ needs.generate-build-environment.outputs.project-path }}\log.txt
+
+  build-pc:
+    name: Build PC
+    needs: [sync-project, import-assets-pc, generate-build-environment]
+    runs-on: ${{ needs.sync-project.outputs.runner-name }}
+    if: success() || !failure() #NOTE(mendsley): Run unless the previous job was cancelled
+    outputs:
+      runner-name: ${{ runner.name }}
+    steps:
+      - name: Kill any existing builder
+        run: |
+          docker rm -f pew-unity-builder
+
+      - name: Ensure we're on the correct commit
+        run: |
+          pushd title
+          git reset --hard ${{ needs.sync-project.outputs.commit }}
+          git clean -ddffx -e /**/Library/
+
+      - name: Build PC package
+        run: |
+          docker run --rm `
+            --name pew-unity-builder `
+            -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
+            ${{ needs.generate-build-environment.outputs.image-name }} `
+            c:\Unity\Editor\Unity.exe `
+            -batchmode `
+            -nographics `
+            -adb2 `
+            -EnableCacheServer `
+            -cacheServerEndpoint 10.50.10.208 `
+            -cacheServerEnableDownload true `
+            -cacheServerEnableUpload true `
+            -projectPath c:\Source `
+            -logFile C:\Source\log.txt `
+            -buildWindows64Player C:\Source\build\${{ inputs.binary-name }}.exe `
+            -username ${{ secrets.UNITY_EMAIL }} `
+            -password ${{ secrets.UNITY_PASSWORD }} `
+            -serial ${{ secrets.UNITY_SERIAL }} `
+            -quit
+
+          type ${{ needs.generate-build-environment.outputs.project-path }}\log.txt
+
+  upload-pc-build:
+    name: Upload PC build
+    needs: [build-pc]
+    runs-on: ${{ needs.build-pc.outputs.runner-name }}
+    if: success() || !failure() #NOTE(mendsley): Run unless the previous job was cancelled
+    steps:
+      - name: Archive build
+        run: |
+          tar `
+            --strip-components=1 `
+            -a -c -v `
+            -f ${{ needs.build-pc.outputs.project-path }}\Build_PC_${{ github.run_number }}P.zip `
+            ${{ needs.build-pc.outputs.project-path }}\build
+
+      - name: Upload build to Google Drive
+        uses: willo32/google-drive-upload-action@v1
+        with:
+          credentials: ${{ secrets.GOOLE_UPLOAD_CREDENTIALS_E2C8C19D28AF }}
+          parent_folder_id: ${{ inputs.google-folder-id }}
+          target: ${{ needs.build-pc.outputs.project-path }}\Build_PC_${{ github.run_number }}P.zip
+          name: BUILD_PC_${{ github.run_number }}P.zip
+
+      - name: Note the build file name
+        run: |
+          echo "::notice title=Build Artifact::Uploaded PC build as BUILD_PC_${{ github.run_number }}P.zip"
