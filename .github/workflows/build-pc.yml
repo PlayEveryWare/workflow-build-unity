@@ -179,7 +179,7 @@ jobs:
             -nographics `
             -adb2 `
             -EnableCacheServer `
-            -cacheServerEndpoint 10.50.10.208 `
+            -cacheServerEndpoint unityaccel.office.playeveryware.com `
             -cacheServerEnableDownload true `
             -cacheServerEnableUpload true `
             -projectPath c:\Source `
@@ -221,7 +221,7 @@ jobs:
             -nographics `
             -adb2 `
             -EnableCacheServer `
-            -cacheServerEndpoint 10.50.10.208 `
+            -cacheServerEndpoint unityaccel.office.playeveryware.com `
             -cacheServerEnableDownload true `
             -cacheServerEnableUpload true `
             -projectPath c:\Source `
