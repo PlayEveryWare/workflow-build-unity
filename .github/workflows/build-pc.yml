@@ -29,6 +29,8 @@ on:
         required: true
         default: 'self-hosted'
 
+concurrency: ${{ inputs.repository }}
+
 jobs:
   # Find a runner, and sync the project
   sync-project:
