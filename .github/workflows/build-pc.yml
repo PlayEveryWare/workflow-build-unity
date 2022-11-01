@@ -196,6 +196,7 @@ jobs:
     if: success() || !failure() #NOTE(mendsley): Run unless the previous job was cancelled
     outputs:
       runner-name: ${{ runner.name }}
+      project-path: ${{ needs.generate-build-environment.outputs.project-path }}
     steps:
       - name: Kill any existing builder
         run: |
