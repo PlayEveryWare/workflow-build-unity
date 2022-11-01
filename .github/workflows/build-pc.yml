@@ -150,25 +150,28 @@ jobs:
     name: Perform initial PC asset import
     needs: [sync-project, generate-build-environment]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
-    if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
     outputs:
       runner-name: ${{ runner.name }}
     steps:
       - name: Ensure we're on the correct commit
+        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
           pushd title
           git reset --hard ${{ needs.sync-project.outputs.commit }}
           git clean -ddffx -e /**/Library/
 
       - name: Log warning that asset import may take a while
+        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
           echo "::warning::No Library/ folder detected. Performing a fresh asset import"
 
       - name: Kill any existing builder
+        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
           docker rm -f pew-unity-builder
 
       - name: Import assets
+        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
           docker run --rm `
             --name pew-unity-builder `
@@ -195,7 +198,6 @@ jobs:
     name: Build PC
     needs: [sync-project, import-assets-pc, generate-build-environment]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
-    if: success() || !failure() #NOTE(mendsley): Run unless the previous job was cancelled
     outputs:
       runner-name: ${{ runner.name }}
       project-path: ${{ needs.generate-build-environment.outputs.project-path }}
@@ -238,7 +240,6 @@ jobs:
     name: Upload PC build
     needs: [build-pc]
     runs-on: ${{ needs.build-pc.outputs.runner-name }}
-    if: success() || !failure() #NOTE(mendsley): Run unless the previous job was cancelled
     steps:
       - name: Archive build
         run: |
