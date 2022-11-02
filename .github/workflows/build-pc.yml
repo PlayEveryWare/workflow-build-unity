@@ -243,18 +243,22 @@ jobs:
     steps:
       - name: Archive build
         run: |
+          pushd ${{ needs.build-pc.outputs.project-path }}
           tar `
             --strip-components=1 `
             -a -c -v `
-            -f ${{ needs.build-pc.outputs.project-path }}\Build_PC_${{ github.run_number }}P.zip `
-            ${{ needs.build-pc.outputs.project-path }}\build
+            -f Build_PC_${{ github.run_number }}P.zip `
+            build
+
+          move Build_PC_${{ github.run_number }}P.zip ${{ github.workspace }}\
+          popd
 
       - name: Upload build to Google Drive
         uses: willo32/google-drive-upload-action@v1
         with:
           credentials: ${{ secrets.GOOLE_UPLOAD_CREDENTIALS_E2C8C19D28AF }}
           parent_folder_id: ${{ inputs.google-folder-id }}
-          target: ${{ needs.build-pc.outputs.project-path }}\Build_PC_${{ github.run_number }}P.zip
+          target: Build_PC_${{ github.run_number }}P.zip
           name: BUILD_PC_${{ github.run_number }}P.zip
 
       - name: Note the build file name
