@@ -38,7 +38,6 @@ jobs:
     runs-on: ${{ inputs.runner }}
     outputs:
       runner-name: ${{ runner.name }}
-      commit: ${{ steps.checkout.outputs.ref }}
     steps:
       - name: Kill any existing builds
         run: |
@@ -91,15 +90,8 @@ jobs:
       library-folder-exists: ${{ steps.info.outputs.library-folder-exists }}
       project-path: ${{ steps.info.outputs.project-path }}
     steps:
-      - name: Ensure we're on the correct commit
-        run: |
-          pushd title
-          git reset --hard ${{ needs.sync-project.outputs.commit }}
-          git clean -ddffx -e /**/Library/
-
       - id: info
         name: Get Unity project information
-        uses: PlayEveryWare/action-unity-info@v1
         with:
           path: title
           project-version: ${{ inputs.project-version }}
@@ -153,13 +145,6 @@ jobs:
     outputs:
       runner-name: ${{ runner.name }}
     steps:
-      - name: Ensure we're on the correct commit
-        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
-        run: |
-          pushd title
-          git reset --hard ${{ needs.sync-project.outputs.commit }}
-          git clean -ddffx -e /**/Library/
-
       - name: Log warning that asset import may take a while
         if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
@@ -205,12 +190,6 @@ jobs:
       - name: Kill any existing builder
         run: |
           docker rm -f pew-unity-builder
-
-      - name: Ensure we're on the correct commit
-        run: |
-          pushd title
-          git reset --hard ${{ needs.sync-project.outputs.commit }}
-          git clean -ddffx -e /**/Library/
 
       - name: Build PC package
         run: |
