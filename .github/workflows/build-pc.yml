@@ -147,7 +147,7 @@ jobs:
   # Import assets if the Library/ folder doesn't exist. We do this as a
   # separate job so it's obvious why the build is taking a long time.
   import-assets-pc:
-    name: Perform initial PC asset import
+    name: Import assets (if needed)
     needs: [sync-project, generate-build-environment]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
     outputs:
