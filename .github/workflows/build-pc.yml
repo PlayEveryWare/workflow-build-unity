@@ -92,6 +92,7 @@ jobs:
     steps:
       - id: info
         name: Get Unity project information
+        uses: PlayEveryWare/action-unity-info@v1
         with:
           path: title
           project-version: ${{ inputs.project-version }}
