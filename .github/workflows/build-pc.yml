@@ -207,6 +207,10 @@ jobs:
         run: |
           docker rm -f pew-unity-builder
 
+      - name: Get host resources
+        id: host-resources
+        uses: playeveryware/action-host-cpumem@v1
+
       - name: Build PC package
         run: |
           docker run --rm `
