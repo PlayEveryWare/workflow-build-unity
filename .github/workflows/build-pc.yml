@@ -31,12 +31,12 @@ on:
       container_cpu_count:
         description: Number of CPUs to use for the build (0 means use all available)
         type: string
-        required: true
+        required: false
         default: 0
       container_memory:
         description: Amount of memory (GB) for container
         type: string
-        required: true
+        required: false
         default: 28
 
 
