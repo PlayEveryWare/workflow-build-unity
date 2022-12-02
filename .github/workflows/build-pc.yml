@@ -175,7 +175,7 @@ jobs:
           docker run --rm `
             --name pew-unity-builder `
             --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }}
-            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}G `
+            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}g `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
@@ -216,7 +216,7 @@ jobs:
           docker run --rm `
             --name pew-unity-builder `
             --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }}
-            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}G `
+            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}g `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
