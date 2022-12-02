@@ -30,12 +30,12 @@ on:
         default: 'self-hosted'
       container_cpu_count:
         description: Number of CPUs to use for the build (0 means use all available)
-        type: integer
+        type: string
         required: true
         default: 0
       container_memory:
         description: Amount of memory (GB) for container
-        type: integer
+        type: string
         required: true
         default: 28
 
