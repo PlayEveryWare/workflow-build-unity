@@ -29,9 +29,9 @@ on:
         required: true
         default: 'self-hosted'
       container_cpu_count:
-        description: Number of CPUs to use for the build
+        description: Number of CPUs to use for the build (0 means use all available)
         required: true
-        default: ${{ env.NUMBER_OF_PROCESSORS }}
+        default: 0
       container_memory:
         description: Amount of memory (GB) for container
         required: true
@@ -170,7 +170,7 @@ jobs:
         run: |
           docker run --rm `
             --name pew-unity-builder `
-            --cpus=${{ inputs.container_cpu_count }}
+            --cpus=${{ inputs.container_cpu_count || env.NUMBER_OF_PROCESSORS }}
             --memory=${{ inputs.container_memory }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
@@ -207,7 +207,7 @@ jobs:
         run: |
           docker run --rm `
             --name pew-unity-builder `
-            --cpus=${{ inputs.container_cpu_count }} `
+            --cpus=${{ inputs.container_cpu_count || env.NUMBER_OF_PROCESSORS }} `
             --memory=${{ inputs.container_memory }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
