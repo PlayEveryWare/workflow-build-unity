@@ -28,6 +28,15 @@ on:
         type: string
         required: true
         default: 'self-hosted'
+      container_cpu_count:
+        description: Number of CPUs to use for the build
+        required: true
+        default: ${{ env.NUMBER_OF_PROCESSORS }}
+      container_memory:
+        description: Amount of memory (GB) for container
+        required: true
+        default: 28
+
 
 concurrency: ${{ inputs.repository }}
 
@@ -161,6 +170,8 @@ jobs:
         run: |
           docker run --rm `
             --name pew-unity-builder `
+            --cpus=${{ inputs.container_cpu_count }}
+            --memory=${{ inputs.container_memory }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
@@ -196,6 +207,8 @@ jobs:
         run: |
           docker run --rm `
             --name pew-unity-builder `
+            --cpus=${{ inputs.container_cpu_count }} `
+            --memory=${{ inputs.container_memory }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
