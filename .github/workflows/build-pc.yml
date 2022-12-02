@@ -33,10 +33,9 @@ on:
         type: string
         required: false
       container_memory:
-        description: Amount of memory (GB) for container
+        description: Amount of memory (GB) for container (blank means use all available)
         type: string
         required: false
-        default: 28
 
 
 concurrency: ${{ inputs.repository }}
@@ -166,13 +165,17 @@ jobs:
         run: |
           docker rm -f pew-unity-builder
 
+      - name: Get host resources
+        id: host-resources
+        uses: playeveryware/action-host-cpumem@v1
+
       - name: Import assets
         if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
         run: |
           docker run --rm `
             --name pew-unity-builder `
-            --cpus=${{ inputs.container_cpu_count || env.NUMBER_OF_PROCESSORS }}
-            --memory=${{ inputs.container_memory }}G `
+            --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }}
+            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
@@ -208,8 +211,8 @@ jobs:
         run: |
           docker run --rm `
             --name pew-unity-builder `
-            --cpus=${{ inputs.container_cpu_count || env.NUMBER_OF_PROCESSORS }} `
-            --memory=${{ inputs.container_memory }}G `
+            --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }}
+            --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}G `
             -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
             ${{ needs.generate-build-environment.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
