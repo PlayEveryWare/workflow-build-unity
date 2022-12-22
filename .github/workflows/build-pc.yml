@@ -98,7 +98,17 @@ jobs:
       image-name: ${{ steps.info.outputs.image-name }}
       library-folder-exists: ${{ steps.info.outputs.library-folder-exists }}
       project-path: ${{ steps.info.outputs.project-path }}
+      build-name-pc: ${{ steps.build-name.outputs.pc }}
     steps:
+      - id: build-name
+        name: Generate build artifact names
+        uses: PlayEveryWare/action-create-build-name@v2
+        with:
+          project-name: ${{ inputs.binary-name }}
+          branch-name: ${{ inputs.ref }}
+          repository-path: title
+          build-configuration: RELEASE
+
       - id: info
         name: Get Unity project information
         uses: PlayEveryWare/action-unity-info@v1
@@ -239,8 +249,10 @@ jobs:
 
   upload-pc-build:
     name: Upload PC build
-    needs: [build-pc]
+    needs: [build-pc, generate-build-environment]
     runs-on: ${{ needs.build-pc.outputs.runner-name }}
+    env:
+      build-name: ${{ needs.generate-build-environment.outputs.build-name-pc }}
     steps:
       - name: Archive build
         run: |
@@ -248,10 +260,10 @@ jobs:
           tar `
             --strip-components=1 `
             -a -c -v `
-            -f Build_PC_${{ github.run_number }}P.zip `
+            -f ${{ env.build-name }}
             build
 
-          move Build_PC_${{ github.run_number }}P.zip ${{ github.workspace }}\
+          move ${{ env.build-name }} ${{ github.workspace }}\
           popd
 
       - name: Upload build to Google Drive
@@ -259,9 +271,9 @@ jobs:
         with:
           credentials: ${{ secrets.GOOLE_UPLOAD_CREDENTIALS_E2C8C19D28AF }}
           parent_folder_id: ${{ inputs.google-folder-id }}
-          target: Build_PC_${{ github.run_number }}P.zip
-          name: BUILD_PC_${{ github.run_number }}P.zip
+          target: ${{ env.build-name }}
+          name: ${{ env.build-name }}
 
       - name: Note the build file name
         run: |
-          echo "::notice title=Build Artifact::Uploaded PC build as BUILD_PC_${{ github.run_number }}P.zip"
+          echo "::notice title=Build Artifact::Uploaded PC build as ${{ env.build-name }}"
