@@ -260,7 +260,7 @@ jobs:
           tar `
             --strip-components=1 `
             -a -c -v `
-            -f ${{ env.build-name }}
+            -f ${{ env.build-name }} `
             build
 
           move ${{ env.build-name }} ${{ github.workspace }}\
