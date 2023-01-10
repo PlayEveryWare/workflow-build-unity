@@ -194,63 +194,19 @@ jobs:
         run: |
           docker pull ${{ steps.info.outputs.image-name }}
 
-  # Import assets if the Library/ folder doesn't exist. We do this as a
-  # separate job so it's obvious why the build is taking a long time.
-  import-assets-pc:
-    name: Import assets (if needed)
+  build-pc:
+    name: Build PC
     needs: [sync-project, prepare]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
     outputs:
       runner-name: ${{ runner.name }}
+      project-path: ${{ needs.prepare.outputs.project-path }}
     steps:
       - name: Log warning that asset import may take a while
         if: needs.prepare.outputs.library-folder-exists != 'true'
         run: |
           echo "::warning::No Library/ folder detected. Performing a fresh asset import"
 
-      - name: Kill any existing builder
-        if: needs.prepare.outputs.library-folder-exists != 'true'
-        run: |
-          docker rm -f pew-unity-builder
-
-      - name: Get host resources
-        id: host-resources
-        uses: playeveryware/action-host-cpumem@v1
-
-      - name: Import assets
-        if: needs.prepare.outputs.library-folder-exists != 'true'
-        run: |
-          docker run --rm `
-            --name pew-unity-builder `
-            --cpus=${{ inputs.container-cpu-count || steps.host-resources.outputs.cpu-count }} `
-            --memory=${{ inputs.container-memory || steps.host-resources.outputs.memory-gb }}g `
-            -v ${{ needs.prepare.outputs.project-path }}:C:\Source `
-            ${{ needs.prepare.outputs.image-name }} `
-            c:\Unity\Editor\Unity.exe `
-            -batchmode `
-            -nographics `
-            -adb2 `
-            -EnableCacheServer `
-            -cacheServerEndpoint unityaccel.office.playeveryware.com `
-            -cacheServerEnableDownload true `
-            -cacheServerEnableUpload true `
-            -projectPath c:\Source `
-            -logFile C:\Source\log.txt `
-            -username ${{ secrets.UNITY_EMAIL }} `
-            -password ${{ secrets.UNITY_PASSWORD }} `
-            -serial ${{ secrets.UNITY_SERIAL }} `
-            -quit
-
-          type ${{ needs.prepare.outputs.project-path }}\log.txt
-
-  build-pc:
-    name: Build PC
-    needs: [sync-project, import-assets-pc, prepare]
-    runs-on: ${{ needs.sync-project.outputs.runner-name }}
-    outputs:
-      runner-name: ${{ runner.name }}
-      project-path: ${{ needs.prepare.outputs.project-path }}
-    steps:
       - name: Kill any existing builder
         run: |
           docker rm -f pew-unity-builder
