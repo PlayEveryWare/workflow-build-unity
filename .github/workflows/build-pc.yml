@@ -6,7 +6,8 @@ on:
       repository:
         description: Repository hosting the project
         type: string
-        required: true
+        default: ${{ github.repository }}
+        required: false
       ref:
         description: Reference to checkout
         type: string
