@@ -37,6 +37,10 @@ on:
         description: Amount of memory (GB) for container (blank means use all available)
         type: string
         required: false
+      slack-channel:
+        description: (Optional) Slack channel to post build notifications
+        type: string
+        required: false
 
 
 concurrency: ${{ inputs.repository }}
@@ -90,7 +94,7 @@ jobs:
           clean-exclude: /**/Library/
 
   # Gerenrate the build environemnt needed for the project
-  generate-build-environment:
+  prepare:
     name: Prepare build environment
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
     needs: sync-project
@@ -99,7 +103,11 @@ jobs:
       image-name: ${{ steps.info.outputs.image-name }}
       library-folder-exists: ${{ steps.info.outputs.library-folder-exists }}
       project-path: ${{ steps.info.outputs.project-path }}
+      name-short: ${{ steps.build-name.outputs.short }}
       build-name-pc: ${{ steps.build-name.outputs.pc }}
+      thread-ts: ${{ steps.slack.outputs.ts }}
+      thread-channel: ${{ steps.slack.outputs.channel_id }}
+      actor: ${{ github.actor }}
     steps:
       - id: build-name
         name: Generate build artifact names
@@ -116,6 +124,29 @@ jobs:
         with:
           path: title
           project-version: ${{ inputs.project-version }}
+
+      - id: slack
+        if: inputs.slack-channel != ''
+        name: Notify slack build is starting
+        uses: playeveryware/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ inputs.slack-channel }}
+          slack-message: ":waiting: Build `${{ steps.build-name.outputs.short }}` started by `${{ env.ACTOR }}` from branch `${{ github.ref_name }}`"
+
+      - name: Notify slack of build logs
+        uses: playeveryware/action-slack@v1-pew
+        if: inputs.slack-channel != ''
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ inputs.slack-channel }}
+          payload: |
+            {
+              "text": "See logs at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "thread_ts": "${{ steps.slack.outputs.ts }}"
+            }
 
       - name: Dump Unity project information
         run: |
@@ -161,18 +192,18 @@ jobs:
   # separate job so it's obvious why the build is taking a long time.
   import-assets-pc:
     name: Import assets (if needed)
-    needs: [sync-project, generate-build-environment]
+    needs: [sync-project, prepare]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
     outputs:
       runner-name: ${{ runner.name }}
     steps:
       - name: Log warning that asset import may take a while
-        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
+        if: needs.prepare.outputs.library-folder-exists != 'true'
         run: |
           echo "::warning::No Library/ folder detected. Performing a fresh asset import"
 
       - name: Kill any existing builder
-        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
+        if: needs.prepare.outputs.library-folder-exists != 'true'
         run: |
           docker rm -f pew-unity-builder
 
@@ -181,14 +212,14 @@ jobs:
         uses: playeveryware/action-host-cpumem@v1
 
       - name: Import assets
-        if: needs.generate-build-environment.outputs.library-folder-exists != 'true'
+        if: needs.prepare.outputs.library-folder-exists != 'true'
         run: |
           docker run --rm `
             --name pew-unity-builder `
             --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }} `
             --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}g `
-            -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
-            ${{ needs.generate-build-environment.outputs.image-name }} `
+            -v ${{ needs.prepare.outputs.project-path }}:C:\Source `
+            ${{ needs.prepare.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
             -batchmode `
             -nographics `
@@ -204,15 +235,15 @@ jobs:
             -serial ${{ secrets.UNITY_SERIAL }} `
             -quit
 
-          type ${{ needs.generate-build-environment.outputs.project-path }}\log.txt
+          type ${{ needs.prepare.outputs.project-path }}\log.txt
 
   build-pc:
     name: Build PC
-    needs: [sync-project, import-assets-pc, generate-build-environment]
+    needs: [sync-project, import-assets-pc, prepare]
     runs-on: ${{ needs.sync-project.outputs.runner-name }}
     outputs:
       runner-name: ${{ runner.name }}
-      project-path: ${{ needs.generate-build-environment.outputs.project-path }}
+      project-path: ${{ needs.prepare.outputs.project-path }}
     steps:
       - name: Kill any existing builder
         run: |
@@ -228,8 +259,8 @@ jobs:
             --name pew-unity-builder `
             --cpus=${{ inputs.container_cpu_count || steps.host-resources.outputs.cpu_count }} `
             --memory=${{ inputs.container_memory || steps.host-resources.outputs.memory_gb }}g `
-            -v ${{ needs.generate-build-environment.outputs.project-path }}:C:\Source `
-            ${{ needs.generate-build-environment.outputs.image-name }} `
+            -v ${{ needs.prepare.outputs.project-path }}:C:\Source `
+            ${{ needs.prepare.outputs.image-name }} `
             c:\Unity\Editor\Unity.exe `
             -batchmode `
             -nographics `
@@ -246,16 +277,16 @@ jobs:
             -serial ${{ secrets.UNITY_SERIAL }} `
             -quit
 
-          type ${{ needs.generate-build-environment.outputs.project-path }}\log.txt
+          type ${{ needs.prepare.outputs.project-path }}\log.txt
 
   upload-pc-build:
     name: Upload PC build
-    needs: [build-pc, generate-build-environment]
+    needs: [build-pc, prepare]
     runs-on: ${{ needs.build-pc.outputs.runner-name }}
     outputs:
       upload-pc: ${{ steps.pc-build.outputs.file-id }}
     env:
-      build-name: ${{ needs.generate-build-environment.outputs.build-name-pc }}
+      build-name: ${{ needs.prepare.outputs.build-name-pc }}
     steps:
       - name: Archive build
         run: |
@@ -281,3 +312,39 @@ jobs:
       - name: Note the build file name
         run: |
           echo "::notice title=Build Artifact::Uploaded PC build as ${{ env.build-name }}"
+
+  notify-slack:
+    name: 'Notify slack of build result'
+    runs-on: [self-hosted]
+    needs: [prepare, build-pc, upload-pc-build]
+    if: ${{ always() && needs.prepare.outputs.thread-ts }}
+    steps:
+      - name: Notify slack build has completed
+        if: ${{ contains(needs.upload-pc-build.result, 'success') }}
+        uses: playeveryware/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ needs.prepare.outputs.thread-channel }}
+          slack-message: ":white_check_mark: Build `${{ needs.prepare.outputs.name-short }}` completed. Started by `${{ needs.prepare.outputs.actor }}` from branch `${{ github.ref_name }}`\n * PC: <https://drive.google.com/file/d/${{ needs.upload-pc-build.outputs.upload-pc }}/view?usp=share_link|${{ needs.prepare.outputs.build-name-pc }}>"
+          update-ts: ${{ needs.prepare.outputs.thread-ts }}
+
+      - name: Notify slack build has failed
+        if: ${{ contains(needs.*.result, 'failure') }}
+        uses: playeveryware/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ needs.prepare.outputs.thread-channel }}
+          slack-message: ":x: Build `${{ needs.prepare.outputs.name-short }}` has failed. Started by `${{ needs.prepare.outputs.actor }}` from branch `${{ github.ref_name }}`\n * Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          update-ts: ${{ needs.prepare.outputs.thread-ts }}
+
+      - name: Notify slack build was canceled
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.upload-pc-build.result, 'success') }}
+        uses: playeveryware/action-slack@v1-pew
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ needs.prepare.outputs.thread-channel }}
+          slack-message: ":heavy_multiplication_x: Build `${{ needs.prepare.outputs.name-short }}` has been cancelled. Started by `${{ needs.prepare.outputs.actor }}` from branch `${{ github.ref_name }}`"
+          update-ts: ${{ needs.prepare.outputs.thread-ts }}
