@@ -57,6 +57,12 @@ jobs:
         run: |
           docker rm -f pew-unity-builder
 
+      - name: Remove any old build artifacts
+        run: |
+          if (Test-Path -Path '${{ github.workspace }}\builds') {
+            Remove-Item -Path '${{ github.workspace }}\builds' -Recurse -Force -Verbose
+          }
+
       - id: app-installation
         name: Find builder installation for ${{ inputs.repository }}
         uses: PlayEveryware/action-find-app-installation@v1
@@ -133,7 +139,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         with:
           channel-id: ${{ inputs.slack-channel }}
-          slack-message: ":waiting: Build `${{ steps.build-name.outputs.short }}` started by `${{ env.ACTOR }}` from branch `${{ github.ref_name }}`"
+          slack-message: ":waiting: Build `${{ steps.build-name.outputs.short }}` started by `${{ github.actor }}` from branch `${{ github.ref_name }}`"
 
       - name: Notify slack of build logs
         uses: playeveryware/action-slack@v1-pew
@@ -294,10 +300,14 @@ jobs:
           tar `
             --strip-components=1 `
             -a -c -v `
-            -f ${{ env.build-name }} `
+            -f "${{ env.build-name }}" `
             build
 
-          move ${{ env.build-name }} ${{ github.workspace }}\
+          if (!(Test-Path -Path '${{ github.workspace }}\builds')) {
+            New-Item -Path '${{ github.workspace }}\builds' -ItemType Directory
+          }
+
+          move '${{ env.build-name }}' '${{ github.workspace }}\builds\'
           popd
 
       - name: Upload build to Google Drive
@@ -306,7 +316,7 @@ jobs:
         with:
           credentials: ${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}
           parent_folder_id: ${{ inputs.google-folder-id }}
-          target: ${{ env.build-name }}
+          target: ${{ github.workspace }}\builds\${{ env.build-name }}
           name: ${{ env.build-name }}
 
       - name: Note the build file name
