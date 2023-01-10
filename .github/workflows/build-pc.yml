@@ -26,7 +26,7 @@ on:
       runner:
         description: Runner to use for the build
         type: string
-        required: true
+        required: false
         default: 'self-hosted'
       container_cpu_count:
         description: Number of CPUs to use for the build (blank means use all available)
