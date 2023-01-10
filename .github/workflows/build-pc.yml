@@ -252,6 +252,8 @@ jobs:
     name: Upload PC build
     needs: [build-pc, generate-build-environment]
     runs-on: ${{ needs.build-pc.outputs.runner-name }}
+    outputs:
+      upload-pc: ${{ steps.pc-build.outputs.file-id }}
     env:
       build-name: ${{ needs.generate-build-environment.outputs.build-name-pc }}
     steps:
@@ -268,9 +270,10 @@ jobs:
           popd
 
       - name: Upload build to Google Drive
-        uses: willo32/google-drive-upload-action@v1
+        id: pc-build
+        uses: PlayEveryWare/action-google-drive-upload@v1
         with:
-          credentials: ${{ secrets.GOOLE_UPLOAD_CREDENTIALS_E2C8C19D28AF }}
+          credentials: ${{ secrets.GOOGLE_UPLOAD_CREDENTIALS }}
           parent_folder_id: ${{ inputs.google-folder-id }}
           target: ${{ env.build-name }}
           name: ${{ env.build-name }}
