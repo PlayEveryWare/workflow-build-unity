@@ -117,7 +117,7 @@ jobs:
     steps:
       - id: build-name
         name: Generate build artifact names
-        uses: PlayEveryWare/action-create-build-name@v2
+        uses: PlayEveryWare/action-create-build-name@v3
         with:
           project-name: ${{ inputs.binary-name }}
           branch-name: ${{ inputs.ref }}
