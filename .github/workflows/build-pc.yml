@@ -99,17 +99,6 @@ jobs:
           lfs-url: ${{ steps.lfs-cache-server.outputs.value }}
           clean-exclude: /**/Library/
 
-      - name: Run pre-build script
-        run: |
-          if ( Test-Path -Path 'title/.github/prebuild.ps1' ) {
-            echo '::notice::Running project's prebuild script...'
-            ./title/.github/prebuild.ps1
-            if ( ! $? ) {
-              echo '::error::Failed to run .github/prebuild.ps1'
-              exit 1
-            }
-          }
-
   # Gerenrate the build environemnt needed for the project
   prepare:
     name: Prepare build environment
@@ -221,6 +210,17 @@ jobs:
       - name: Kill any existing builder
         run: |
           docker rm -f pew-unity-builder
+
+      - name: Run pre-build script
+        run: |
+          if ( Test-Path -Path 'title/.github/prebuild.ps1' ) {
+            echo '::notice::Running projects prebuild script...'
+            ./title/.github/prebuild.ps1
+            if ( ! $? ) {
+              echo '::error::Failed to run .github/prebuild.ps1'
+              exit 1
+            }
+          }
 
       - name: Get host resources
         id: host-resources
